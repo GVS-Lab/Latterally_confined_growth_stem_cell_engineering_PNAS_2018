@@ -5,7 +5,7 @@ In the paper, we present a novel assay for reprogramming fibroblasts into iPSC-l
 
 <br/>
 <p align="center">
-<img src='/Imgs/top_genes.png' height='200' width='200'><br/>
+<img src='/Imgs/top_genes.png' height='300' width='300'><br/>
 </p>
 
 Our work is presented in this [scientific feature](https://mbi.nus.edu.sg/science-features/physically-rewiring-the-genome/).
