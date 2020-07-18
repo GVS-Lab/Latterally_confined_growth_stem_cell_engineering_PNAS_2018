@@ -1,0 +1,1066 @@
+---
+title: "R analysis of RNASeq Count Data Workflow: 1"
+coutput: 
+  html_document: 
+    fig_caption: yes
+    fig_height: 6
+    highlight: tango
+    toc: yes
+---
+#Reading the HTSeq counts data and preparing the annotation file
+
+Read in all the RNA seq read counts files and merge all the counts into one large data frame by the transcript id. The inheritance sheet describes the sample information. Then one can sum up the technical replicates. The Technical replicates are often well correlation and any noise in them will be pooled as a result of the summation. Then read in the mouse genome annotation file used by HT-seq and calculate the length of transcripts and use this information to normalize the gene expression. A histogram of the distribution of the transcript lengths is plotted to visualize this distribution. 
+
+The normalization is done as follows: first divide Headcount of each transcript by the transcript length in Kbp. This will be Reads per Kbp (RPK). Second divide each transcript by the total sum of all RPKs in a Biological Replicate in Millions. This will give transcript per kilobasepair million (TPKM). This kind of normalization will first take care that the read counts are not influenced by the gene length (as longer genes can have more number of reads mapped with one cDNA). Then, it accounts for the changes in the sequencing depth for each sample. Hence, the sum of all TPKM values is 10^6 in all the samples, making comparisons between samples more reliable. 
+
+
+Following this, the Mean across the biological replicates and the standard deviation of such mean gene expression in the population are calculated and visualized. This is followed by the calculation and visualization of the z scores and the fold changes. These data provide information in regards to how much is the transcript expression profile changing in the overall population. 
+
+Then the master sheet containing all these values are saved before we proceed. 
+```{r}
+library(knitr)
+inheritence <- read.csv("D:/saradha/RNA seq/inheritence.csv", header=FALSE)
+
+# Read in all the RNA seq read counts files (output of htseq)
+
+S1ai<- read.delim("D:/saradha/RNA seq/htseq/Galaxy107-[htseq-count_on_data_13_and_data_18].tabular", header=FALSE)
+S1aii<- read.delim("D:/saradha/RNA seq/htseq/Galaxy14-[htseq-count_on_data_4_and_data_11].tabular", header=FALSE)
+S1aiii<- read.delim("D:/saradha/RNA seq/htseq/Galaxy16-[htseq-count_on_data_4_and_data_12].tabular", header=FALSE)
+S1aiv<- read.delim("D:/saradha/RNA seq/htseq/Galaxy18-[htseq-count_on_data_4_and_data_13].tabular", header=FALSE)
+colnames(S1ai)<-c("trnascript_id","S1_B1_L1")
+colnames(S1aii)<-c("trnascript_id","S1_B1_L2")
+colnames(S1aiii)<-c("trnascript_id","S1_B1_L3")
+colnames(S1aiv)<-c("trnascript_id","S1_B1_L4")
+
+S2ai <- read.delim("D:/saradha/RNA seq/htseq/Galaxy447-[htseq-count_on_data_89_and_data_309].tabular", header=FALSE)
+S2aii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy61-[htseq-count_on_data_10_and_data_29].tabular", header=FALSE)
+S2aiii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy63-[htseq-count_on_data_10_and_data_30].tabular", header=FALSE)
+S2aiv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy65-[htseq-count_on_data_10_and_data_31].tabular", header=FALSE)
+colnames(S2ai)<-c("trnascript_id","S2_B1_L1")
+colnames(S2aii)<-c("trnascript_id","S2_B1_L2")
+colnames(S2aiii)<-c("trnascript_id","S2_B1_L3")
+colnames(S2aiv)<-c("trnascript_id","S2_B1_L4")
+
+S3ai <- read.delim("D:/saradha/RNA seq/htseq/Galaxy11-[htseq-count_on_data_10_and_data_1].tabular", header=FALSE)
+S3aii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy67-[htseq-count_on_data_10_and_data_32].tabular", header=FALSE)
+S3aiii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy69-[htseq-count_on_data_10_and_data_33].tabular", header=FALSE)
+S3aiv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy71-[htseq-count_on_data_10_and_data_34].tabular", header=FALSE)
+colnames(S3ai)<-c("trnascript_id","S3_B1_L1")
+colnames(S3aii)<-c("trnascript_id","S3_B1_L2")
+colnames(S3aiii)<-c("trnascript_id","S3_B1_L3")
+colnames(S3aiv)<-c("trnascript_id","S3_B1_L4")
+
+S4ai <- read.delim("D:/saradha/RNA seq/htseq/Galaxy13-[htseq-count_on_data_10_and_data_2].tabular", header=FALSE)
+S4aii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy73-[htseq-count_on_data_10_and_data_35].tabular", header=FALSE)
+S4aiii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy75-[htseq-count_on_data_10_and_data_36].tabular", header=FALSE)
+S4aiv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy5-[htseq-count_on_data_4_and_data_1].tabular", header=FALSE)
+colnames(S4ai)<-c("trnascript_id","S4_B1_L1")
+colnames(S4aii)<-c("trnascript_id","S4_B1_L2")
+colnames(S4aiii)<-c("trnascript_id","S4_B1_L3")
+colnames(S4aiv)<-c("trnascript_id","S4_B1_L4")
+
+S1bi <- read.delim("D:/saradha/RNA seq/htseq/Galaxy15-[htseq-count_on_data_10_and_data_3].tabular", header=FALSE)
+S1bii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy77-[htseq-count_on_data_10_and_data_38].tabular", header=FALSE)
+S1biii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy79-[htseq-count_on_data_10_and_data_39].tabular", header=FALSE)
+S1biv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy81-[htseq-count_on_data_10_and_data_40].tabular", header=FALSE)
+colnames(S1bi)<-c("trnascript_id","S1_B2_L1")
+colnames(S1bii)<-c("trnascript_id","S1_B2_L2")
+colnames(S1biii)<-c("trnascript_id","S1_B2_L3")
+colnames(S1biv)<-c("trnascript_id","S1_B2_L4")
+
+S2bi <- read.delim("D:/saradha/RNA seq/htseq/Galaxy17-[htseq-count_on_data_10_and_data_4].tabular", header=FALSE)
+S2bii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy83-[htseq-count_on_data_10_and_data_41].tabular", header=FALSE)
+S2biii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy85-[htseq-count_on_data_10_and_data_42].tabular", header=FALSE)
+S2biv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy87-[htseq-count_on_data_10_and_data_43].tabular", header=FALSE)
+colnames(S2bi)<-c("trnascript_id","S2_B2_L1")
+colnames(S2bii)<-c("trnascript_id","S2_B2_L2")
+colnames(S2biii)<-c("trnascript_id","S2_B2_L3")
+colnames(S2biv)<-c("trnascript_id","S2_B2_L4")
+
+S3bi <- read.delim("D:/saradha/RNA seq/htseq/Galaxy19-[htseq-count_on_data_10_and_data_5].tabular", header=FALSE)
+S3bii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy89-[htseq-count_on_data_10_and_data_44].tabular", header=FALSE)
+S3biii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy91-[htseq-count_on_data_10_and_data_45].tabular", header=FALSE)
+S3biv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy93-[htseq-count_on_data_10_and_data_46].tabular", header=FALSE)
+colnames(S3bi)<-c("trnascript_id","S3_B2_L1")
+colnames(S3bii)<-c("trnascript_id","S3_B2_L2")
+colnames(S3biii)<-c("trnascript_id","S3_B2_L3")
+colnames(S3biv)<-c("trnascript_id","S3_B2_L4")
+
+S4bi <- read.delim("D:/saradha/RNA seq/htseq/Galaxy21-[htseq-count_on_data_10_and_data_6].tabular", header=FALSE)
+S4bii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy95-[htseq-count_on_data_10_and_data_47].tabular", header=FALSE)
+S4biii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy97-[htseq-count_on_data_10_and_data_48].tabular", header=FALSE)
+S4biv <- read.delim("D:/saradha/RNA seq/htseq/Galaxy99-[htseq-count_on_data_10_and_data_49].tabular", header=FALSE)
+colnames(S4bi)<-c("trnascript_id","S4_B2_L1")
+colnames(S4bii)<-c("trnascript_id","S4_B2_L2")
+colnames(S4biii)<-c("trnascript_id","S4_B2_L3")
+colnames(S4biv)<-c("trnascript_id","S4_B2_L4")
+
+S1ci <- read.delim("D:/saradha/RNA seq/htseq/Galaxy23-[htseq-count_on_data_10_and_data_7].tabular", header=FALSE)
+S1cii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy101-[htseq-count_on_data_10_and_data_50].tabular", header=FALSE)
+S1ciii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy103-[htseq-count_on_data_10_and_data_51].tabular", header=FALSE)
+S1civ <- read.delim("D:/saradha/RNA seq/htseq/Galaxy7-[htseq-count_on_data_4_and_data_2].tabular", header=FALSE)
+colnames(S1ci)<-c("trnascript_id","S1_B3_L1")
+colnames(S1cii)<-c("trnascript_id","S1_B3_L2")
+colnames(S1ciii)<-c("trnascript_id","S1_B3_L3")
+colnames(S1civ)<-c("trnascript_id","S1_B3_L4")
+
+S2ci <- read.delim("D:/saradha/RNA seq/htseq/Galaxy25-[htseq-count_on_data_10_and_data_8].tabular", header=FALSE)
+S2cii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy105-[htseq-count_on_data_10_and_data_53].tabular", header=FALSE)
+S2ciii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy107-[htseq-count_on_data_10_and_data_54].tabular", header=FALSE)
+S2civ <- read.delim("D:/saradha/RNA seq/htseq/Galaxy21-[htseq-count_on_data_4_and_data_20].tabular", header=FALSE)
+colnames(S2ci)<-c("trnascript_id","S2_B3_L1")
+colnames(S2cii)<-c("trnascript_id","S2_B3_L2")
+colnames(S2ciii)<-c("trnascript_id","S2_B3_L3")
+colnames(S2civ)<-c("trnascript_id","S2_B3_L4")
+
+S3ci <- read.delim("D:/saradha/RNA seq/htseq/Galaxy27-[htseq-count_on_data_10_and_data_9].tabular", header=FALSE)
+S3cii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy109-[htseq-count_on_data_10_and_data_55].tabular", header=FALSE)
+S3ciii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy111-[htseq-count_on_data_10_and_data_56].tabular", header=FALSE)
+S3civ <- read.delim("D:/saradha/RNA seq/htseq/Galaxy113-[htseq-count_on_data_10_and_data_57].tabular", header=FALSE)
+colnames(S3ci)<-c("trnascript_id","S3_B3_L1")
+colnames(S3cii)<-c("trnascript_id","S3_B3_L2")
+colnames(S3ciii)<-c("trnascript_id","S3_B3_L3")
+colnames(S3civ)<-c("trnascript_id","S3_B3_L4")
+
+S4ci <- read.delim("D:/saradha/RNA seq/htseq/Galaxy467-[htseq-count_on_data_89_and_data_299].tabular", header=FALSE)
+S4cii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy115-[htseq-count_on_data_10_and_data_58].tabular", header=FALSE)
+S4ciii <- read.delim("D:/saradha/RNA seq/htseq/Galaxy117-[htseq-count_on_data_10_and_data_59].tabular", header=FALSE)
+S4civ <- read.delim("D:/saradha/RNA seq/htseq/Galaxy119-[htseq-count_on_data_10_and_data_60].tabular", header=FALSE)
+colnames(S4ci)<-c("trnascript_id","S4_B3_L1")
+colnames(S4cii)<-c("trnascript_id","S4_B3_L2")
+colnames(S4ciii)<-c("trnascript_id","S4_B3_L3")
+colnames(S4civ)<-c("trnascript_id","S4_B3_L4")
+
+# merge all the counts into one large dataframe by the transcript id. 
+
+rnaseq <- merge(S1ai,S1aii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1aiii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1aiv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2ai,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2aii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2aiii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2aiv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3ai,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3aii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3aiii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3aiv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4ai,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4aii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4aiii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4aiv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1bi,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1bii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1biii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1biv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2bi,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2bii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2biii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2biv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3bi,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3bii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3biii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3biv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4bi,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4bii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4biii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4biv,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1ci,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1cii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1ciii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S1civ,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2ci,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2cii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2ciii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S2civ,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3ci,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3cii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3ciii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S3civ,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4ci,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4cii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4ciii,by="trnascript_id")
+rnaseq <- merge(rnaseq,S4civ,by="trnascript_id")
+
+# sum up the technical replicates
+
+rnaseq$S1_B1 <- rowSums(rnaseq[,c("S1_B1_L1", "S1_B1_L2","S1_B1_L3", "S1_B1_L4")], na.rm=T)
+rnaseq$S2_B1 <- rowSums(rnaseq[,c("S2_B1_L1", "S2_B1_L2","S2_B1_L3", "S2_B1_L4")], na.rm=T)
+rnaseq$S3_B1 <- rowSums(rnaseq[,c("S3_B1_L1", "S3_B1_L2","S3_B1_L3", "S3_B1_L4")], na.rm=T)
+rnaseq$S4_B1 <- rowSums(rnaseq[,c("S4_B1_L1", "S4_B1_L2","S4_B1_L3", "S4_B1_L4")], na.rm=T)
+
+rnaseq$S1_B2 <- rowSums(rnaseq[,c("S1_B2_L1", "S1_B2_L2","S1_B2_L3", "S1_B2_L4")], na.rm=T)
+rnaseq$S2_B2 <- rowSums(rnaseq[,c("S2_B2_L1", "S2_B2_L2","S2_B2_L3", "S2_B2_L4")], na.rm=T)
+rnaseq$S3_B2 <- rowSums(rnaseq[,c("S3_B2_L1", "S3_B2_L2","S3_B2_L3", "S3_B2_L4")], na.rm=T)
+rnaseq$S4_B2 <- rowSums(rnaseq[,c("S4_B2_L1", "S4_B2_L2","S4_B2_L3", "S4_B2_L4")], na.rm=T)
+
+rnaseq$S1_B3 <- rowSums(rnaseq[,c("S1_B3_L1", "S1_B3_L2","S1_B3_L3", "S1_B3_L4")], na.rm=T)
+rnaseq$S2_B3 <- rowSums(rnaseq[,c("S2_B3_L1", "S2_B3_L2","S2_B3_L3", "S2_B3_L4")], na.rm=T)
+rnaseq$S3_B3 <- rowSums(rnaseq[,c("S3_B3_L1", "S3_B3_L2","S3_B3_L3", "S3_B3_L4")], na.rm=T)
+rnaseq$S4_B3 <- rowSums(rnaseq[,c("S4_B3_L1", "S4_B3_L2","S4_B3_L3", "S4_B3_L4")], na.rm=T)
+
+
+# function to read the gtf file and assign atttributes
+
+gffRead = function (gffFile, nrows = -1, verbose=FALSE) 
+{
+  if(verbose){
+    cat("Reading ", gffFile, ": ", sep = "")    
+  }
+  gff = read.table(gffFile, sep = "\t", as.is = TRUE, quote = "", 
+                   header = FALSE, comment.char = "#", nrows = nrows, 
+                   colClasses = c("character", "character", "character", "integer", 
+                                  "integer", "character", "character", "character", "character"))
+  colnames(gff) = c("seqname", "source", "feature", "start", 
+                    "end", "score", "strand", "frame", "attributes")
+  if(verbose){
+    cat("found", nrow(gff), "rows with classes:", paste(sapply(gff, 
+                                                               class), collapse = ", "), "\n")
+  }
+  stopifnot(!any(is.na(gff$start)), !any(is.na(gff$end)))
+  return(gff)
+}
+
+
+getAttributeField <- function (x, field, attrsep = "; ") 
+{
+  s = strsplit(x, split = attrsep, fixed = TRUE)
+  sapply(s, function(atts) {
+    a = strsplit(atts, split = " ", fixed = TRUE)
+    m = match(field, sapply(a, "[", 1))
+    if (!is.na(m)) {
+      rv = a[[m]][2]
+    }
+    else {
+      rv = as.character(NA)
+    }
+    return(rv)
+  })
+}
+
+
+# Read in the mouse genome annoation file and separate the annoatation atributes 
+
+mouse_annotation<-gffRead("D:/saradha/RNA seq/Galaxy13-[UCSC_Main_on_Mouse__ensGene_(genome)].gtf")
+mouse_annotation$transcriptID = getAttributeField(mouse_annotation$attributes, field = "transcript_id")
+mouse_annotation$length=mouse_annotation[,5]-mouse_annotation[,4]
+colnames(mouse_annotation)[10]<-"trnascript_id"
+
+# selecting only the exons
+mouse_exons<-subset(mouse_annotation,mouse_annotation[,3]=="exon")
+
+# getting transcript lengths : remove quotation marks and sum up the exons to get transcriptlengths
+lengths<-mouse_exons[,10:11]
+lengths<-as.data.frame(sapply(lengths, function(x) gsub("\"", "", x)))
+lengths<-aggregate(. ~ trnascript_id, data = lengths,sum)
+rnaseq <- merge(rnaseq,lengths[,c(1,2)],by="trnascript_id")
+
+#plot to show the distribution of transcript lengths
+par(font.axis=2,font.lab=2)
+hist(log(rnaseq[,62], base=2), col="gray", las=1, cex.axis=0.8,xlab="length of transcript(log2)",main="")
+t<-quantile(rnaseq[,62])
+text(5,24041.06,paste("Median=",t[3],sep=""), cex=1)
+box()
+
+# normalising the data 
+rnaseq[,63:74]<-rnaseq[,50:61]/(rnaseq[,62]/1000)
+total_reads<-colSums(rnaseq[,63:74])/10^6
+rnaseq[,63]<-rnaseq[,63]/total_reads[1]
+rnaseq[,64]<-rnaseq[,64]/total_reads[2]
+rnaseq[,65]<-rnaseq[,65]/total_reads[3]
+rnaseq[,66]<-rnaseq[,66]/total_reads[4]
+rnaseq[,67]<-rnaseq[,67]/total_reads[5]
+rnaseq[,68]<-rnaseq[,68]/total_reads[6]
+rnaseq[,69]<-rnaseq[,69]/total_reads[7]
+rnaseq[,70]<-rnaseq[,70]/total_reads[8]
+rnaseq[,71]<-rnaseq[,71]/total_reads[9]
+rnaseq[,72]<-rnaseq[,72]/total_reads[10]
+rnaseq[,73]<-rnaseq[,73]/total_reads[11]
+rnaseq[,74]<-rnaseq[,74]/total_reads[12]
+colnames(rnaseq)[63:74]<-c("S1_B1_TPKM","S2_B1_TPKM","S3_B1_TPKM","S4_B1_TPKM",
+                           "S1_B2_TPKM","S2_B2_TPKM","S3_B2_TPKM","S4_B2_TPKM",
+                           "S1_B3_TPKM","S2_B3_TPKM","S3_B3_TPKM","S4_B3_TPKM")
+
+# to show that the TPKM values can be used to compare between samples.
+par(mfrow=c(1,2),font.axis=2,font.lab=2)
+barplot(colSums(rnaseq[,50:61]), las=1, horiz = T, xlab="total reads", cex.axis=0.7,cex.names=0.8)
+box()
+barplot(colSums(rnaseq[,63:74]),las=1, horiz = T,xlab="total reads", cex.axis=0.7,cex.names=0.8)
+box()
+
+#Calculate mean and standard deviation across normalised biological replicates
+
+rnaseq[,75]<-rowMeans(subset(rnaseq, select = c(S1_B1_TPKM,S1_B2_TPKM,S1_B3_TPKM)), na.rm = TRUE)
+rnaseq[,76]<-rowMeans(subset(rnaseq, select = c(S2_B1_TPKM,S2_B2_TPKM,S2_B3_TPKM)), na.rm = TRUE)
+rnaseq[,77]<-rowMeans(subset(rnaseq, select = c(S3_B1_TPKM,S3_B2_TPKM,S3_B3_TPKM)), na.rm = TRUE)
+rnaseq[,78]<-rowMeans(subset(rnaseq, select = c(S4_B1_TPKM,S4_B2_TPKM,S4_B3_TPKM)), na.rm = TRUE)
+colnames(rnaseq)[75:78]<-c("S1","S2","S3","S4")
+
+rnaseq[,79]<-apply(rnaseq[,75:78],1,mean) 
+rnaseq[,80]<-apply(rnaseq[,75:78],1,sd) 
+colnames(rnaseq)[79:80]<-c("Pop_Mean","Pop_Std_Dev")
+
+rnaseq[,81]<-(rnaseq[,75]-rnaseq[,79])/rnaseq[,80]
+rnaseq[,82]<-(rnaseq[,76]-rnaseq[,79])/rnaseq[,80]
+rnaseq[,83]<-(rnaseq[,77]-rnaseq[,79])/rnaseq[,80]
+rnaseq[,84]<-(rnaseq[,78]-rnaseq[,79])/rnaseq[,80]
+colnames(rnaseq)[81:84]<-c("S1_zscore","S2_zscore","S3_zscore","S4_zscore")
+
+# Fold changes
+
+rnaseq[,85]<-rnaseq[,76]/rnaseq[,75]#S2/S1
+rnaseq[,86]<-rnaseq[,77]/rnaseq[,75]#S3/S1
+rnaseq[,87]<-rnaseq[,78]/rnaseq[,75]#S4/S1
+rnaseq[,88]<-rnaseq[,77]/rnaseq[,76]#S3/S2
+rnaseq[,89]<-rnaseq[,78]/rnaseq[,76]#S4/S2
+rnaseq[,90]<-rnaseq[,78]/rnaseq[,77]#S4/S3
+colnames(rnaseq)[85:90]<-c("FC_S2/S1","FC_S3/S1","FC_S4/S1","FC_S3/S4","FC_S4/S2","FC_S4/S3")
+
+par(font.axis=2,font.lab=2)
+boxplot(log(rnaseq[,85:90], base=2),col="gray", las=1,ylab="Foldchange (log2 scale)", lty=1, pch=18)
+par(font.axis=2,font.lab=2)
+boxplot(rnaseq[,81:84],col="gray", las=1,ylab="Zscores", lty=1, pch=18, names=c("S1","S2","S3","S4"))
+par(font.axis=2,font.lab=2)
+hist(log(rnaseq[,79], base=2), col="gray", las=1, cex.axis=0.8,xlab="log2 mean TPKM across samples",main="")
+t<-quantile(rnaseq[,79])
+text(6,6000,paste("Median=",t[3],sep=""), cex=1)
+box()
+par(font.axis=2,font.lab=2)
+hist(log(rnaseq[,80], base=2), col="gray", las=1, cex.axis=0.8,xlab="log2 SD TPKM across samples",main="")
+t<-quantile(rnaseq[,80])
+text(6,6000,paste("Median=",t[3],sep=""), cex=1)
+box()
+write.csv(rnaseq, file="allcombined_transcript_level_expression.csv")
+
+```
+
+##Characerizing the (dis)similarity between the gene expression bewen samples
+In order to characterize the similarities between technical and biological replicates and samples, first we plot scatter-plots and calculate person correlation coefficient between them. This will, coarsely, inform if any sample was very different. The size of the correlation coefficient is proportional to the similarity degree. This correlation is further visualized as a corr-plot. 
+
+Further, the relationship between the samples (normalized and un-normalized) is calculated using Principle component analysis and distance matrices and hierarchical clustering. 
+
+Lastly, the distribution of the raw and normalized transcript and the relationship between them were plotted.
+
+```{r}
+# Correlation coefficient panel
+panel.cor <- function(x, y){
+  usr <- par("usr");on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- round(cor(10^x, 10^y), digits=4)
+  txt <- paste0("R = ", r)
+  cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+# Scatter plane
+upper.panel<-function(x, y){
+  points(x,y, pch = 18)
+}
+# Customize upper panel
+upper.panel.col<-function(x, y){
+  points(x,y, pch=19, col=c("red", "green3", "blue")[candidate_genes_expression$V91],cex=0.3)
+}
+# Create the plots
+par(font.axis=2,font.lab=2,mfrow=c(6,2))
+plot(log10(rnaseq[,2:5]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,6:9]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,10:13]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,14:17]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,18:21]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,22:25]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,26:29]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,30:33]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,34:37]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,38:41]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,42:45]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,46:49]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+par(font.axis=2,font.lab=2,mfrow=c(1,3))
+plot(log10(rnaseq[,50:53]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,54:57]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,58:61]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+par(font.axis=2,font.lab=2,mfrow=c(2,2))
+plot(log10(rnaseq[,c(50,54,58)]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,c(51,55,59)]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,c(52,56,60)]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,c(53,57,61)]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+par(font.axis=2,font.lab=2,mfrow=c(1,3))
+plot(log10(rnaseq[,63:66]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,67:70]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,71:74]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+par(font.axis=2,font.lab=2,mfrow=c(2,2))
+plot(log10(rnaseq[,c(63,67,71)]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,c(64,68,72)]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,c(65,69,73)]), lower.panel = panel.cor,upper.panel = upper.panel)
+plot(log10(rnaseq[,c(66,70,74)]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+par(font.axis=2,font.lab=2,mfrow=c(1,1))
+plot(log10(rnaseq[,75:78]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+library(corrplot)
+#corrplot_all_samples_before_norm
+t<-cor(rnaseq[, 2:49])
+par(font.axis=2,font.lab=2)
+corrplot(t,is.cor=F, tl.col="black",cl.pos="b", cl.ratio=0.4, method="color")
+#corrplot_samples_before_norm
+t<-cor(rnaseq[, 50:61])
+corrplot(t, is.cor=F,tl.col="black",cl.pos="b", cl.ratio=0.4, method="color")
+#corrplot_samples_after_norm
+t<-cor(rnaseq[, 63:74])
+corrplot(t, is.cor=F, tl.col="black",cl.pos="b", cl.ratio=0.4, method="color")
+#corrplot_after_norm
+t<-cor(rnaseq[, 75:78])
+corrplot(t, is.cor=F, tl.col="black",cl.pos="b", cl.ratio=0.4, method="color")
+
+
+# PCA log transform tpkm
+exon <- log2(rnaseq[, 63:74])
+is.na(exon) <- do.call(cbind,lapply(exon, is.infinite)) 
+exon.pca <- prcomp(na.omit(exon),scale= T) 
+t<-as.data.frame(exon.pca$rotation)
+plot(t[,2]~t[,1],pch=18,col=c("purple","blue","red","green4"), cex.axis=1,las=1, cex=1.2, 
+     ylab="PC2",xlab="PC1", main="tpkm_log_scaled")
+legend(-0.28645761,0.08247002,c("S1","S2","S3","S4"), lty=c(1,1), lwd=c(2.5,2.5),col=c("purple","blue","red","green4")) 
+# Sample Distances
+library(corrplot)
+par(mfrow=c(1,2))
+t<-as.matrix(dist(t(exon), upper=T),method = "euclidean")
+corrplot(t, is.corr=F, tl.col="black",method="color")
+plot(hclust(dist(t(exon), method="euclidean")))
+t<-as.matrix(dist(t(exon), upper=F,method = "maximum"))
+corrplot(t, is.corr=F, tl.col="black",method="color")
+plot(hclust(dist(t(exon), method="maximum")))
+
+# log transform unnormalised
+exon <- log2(rnaseq[, 50:61])
+is.na(exon) <- do.call(cbind,lapply(exon, is.infinite)) 
+exon.pca <- prcomp(na.omit(exon),scale= F) 
+t<-as.data.frame(exon.pca$rotation)
+par(mfrow=c(1,1))
+plot(t[,2]~t[,1],pch=18,col=c("purple","blue","red","green4"), cex.axis=1,las=1, cex=1.2, 
+     ylab="PC2",xlab="PC1", main="log unorm unscaled")
+legend(-0.2845761,0.08247002,c("S1","S2","S3","S4"), lty=c(1,1), lwd=c(2.5,2.5),col=c("purple","blue","red","green4")) 
+#Sample Distances
+library(corrplot)
+par(mfrow=c(1,2))
+t<-as.matrix(dist(t(exon), upper=T),method = "euclidean")
+corrplot(t, is.corr=F, tl.col="black",method="color")
+plot(hclust(dist(t(exon), method="euclidean")))
+t<-as.matrix(dist(t(exon), upper=F,method = "maximum"))
+corrplot(t, is.corr=F, tl.col="black",method="color")
+plot(hclust(dist(t(exon), method="maximum")))
+
+
+temp<-as.data.frame(rowMeans(subset(rnaseq, select = c(S1_B1,S1_B2,S1_B3)), na.rm = TRUE))
+temp[,2]<-rowMeans(subset(rnaseq, select = c(S2_B1,S2_B2,S2_B3)), na.rm = TRUE)
+temp[,3]<-rowMeans(subset(rnaseq, select = c(S3_B1,S3_B2,S3_B3)), na.rm = TRUE)
+temp[,4]<-rowMeans(subset(rnaseq, select = c(S4_B1,S4_B2,S4_B3)), na.rm = TRUE)
+par(font.axis=2,font.lab=2)
+par(mfrow=c(2,2))
+hist(log(temp[,1], base=2), col="gray", las=1, cex.axis=0.8,xlab="log2counts",main="S1Raw",xlim=c(-5,20))
+box()
+hist(log(temp[,2], base=2), col="gray", las=1, cex.axis=0.8,xlab="log2counts",main="S2Raw",xlim=c(-5,20))
+box()
+hist(log(temp[,3], base=2), col="gray", las=1, cex.axis=0.8,xlab="log2counts",main="S3Raw",xlim=c(-5,20))
+box()
+hist(log(temp[,4], base=2), col="gray", las=1, cex.axis=0.8,xlab="log2counts",main="S4Raw",xlim=c(-5,20))
+box()
+
+par(font.axis=2,font.lab=2)
+par(mfrow=c(1,1))
+d <- density(log(temp[,4], base=2)) # returns the density data 
+plot(d, col="green4", las=1, lwd=1, main="raw counts")
+d <- density(log(temp[,3], base=2)) # returns the density data 
+lines(d,col="red",lwd=1)
+d <- density(log(temp[,2], base=2)) # returns the density data 
+lines(d,col="blue",lwd=1)
+d <- density(log(temp[,1], base=2)) # returns the density data 
+lines(d,col="purple",lwd=1)
+legend(9.335815,0.05086374,c("S1","S2","S3","S4"), lty=c(1,1), lwd=c(2.5,2.5),col=c("purple","blue","red","green4")) 
+
+par(font.axis=2,font.lab=2)
+par(mfrow=c(2,2))
+hist(log(rnaseq[,75], base=2), col="gray", las=1, cex.axis=0.8,xlab="TPKM",main="S1",xlim=c(-20,20))
+box()
+hist(log(rnaseq[,76], base=2), col="gray", las=1, cex.axis=0.8,xlab="TPKM",main="S2",xlim=c(-20,20))
+box()
+hist(log(rnaseq[,77], base=2), col="gray", las=1, cex.axis=0.8,xlab="TPKM",main="S3",xlim=c(-20,20))
+box()
+hist(log(rnaseq[,78], base=2), col="gray", las=1, cex.axis=0.8,xlab="TPKM",main="S4",xlim=c(-20,20))
+box()
+
+par(font.axis=2,font.lab=2)
+par(mfrow=c(1,1))
+d <- density(log(rnaseq[,78], base=2)) # returns the density data 
+plot(d, col="green4", las=1, lwd=1, main="")
+d <- density(log(rnaseq[,77], base=2)) # returns the density data 
+lines(d,col="red",lwd=1)
+d <- density(log(rnaseq[,76], base=2)) # returns the density data 
+lines(d,col="blue",lwd=1)
+d <- density(log(rnaseq[,75], base=2)) # returns the density data 
+lines(d,col="purple",lwd=1)
+legend(3.903672,0.04176209,c("S1","S2","S3","S4"), lty=c(1,1), lwd=c(2.5,2.5),col=c("purple","blue","red","green4")) 
+
+
+#relationship between normalised and unnormalised data
+par(font.axis=2,font.lab=2)
+par(mfrow=c(2,2))
+plot(log(temp[,1], base=2)~log(rnaseq[,75], base=2), las=1, pch=18, main="S1", xlab="TPKM (log2)",ylab="rawcounts (log2)")
+usr <- par( "usr" )
+a=round(cor(temp[,1],rnaseq[,75]), digits=3)
+text( usr[ 1 ], usr[ 4 ], a,adj = c( -1, 2 ))
+plot(log(temp[,2], base=2)~log(rnaseq[,76], base=2), las=1, pch=18, main="S2",xlab="TPKM (log2)",ylab="rawcounts (log2)")
+usr <- par( "usr" )
+a=round(cor(temp[,2],rnaseq[,76]), digits=3)
+text( usr[ 1 ], usr[ 4 ], a,adj = c( -1, 2 ))
+plot(log(temp[,3], base=2)~log(rnaseq[,77], base=2), las=1, pch=18, main="S3",xlab="TPKM (log2)",ylab="rawcounts (log2)")
+usr <- par( "usr" )
+a=round(cor(temp[,3],rnaseq[,77]), digits=3)
+text( usr[ 1 ], usr[ 4 ], a,adj = c( -1, 2 ))
+plot(log(temp[,4], base=2)~log(rnaseq[,78], base=2), las=1, pch=18, main="S4",xlab="TPKM (log2)",ylab="rawcounts (log2)")
+usr <- par( "usr" )
+a=round(cor(temp[,1],rnaseq[,75]), digits=3)
+text( usr[ 1 ], usr[ 4 ], a,adj = c( -1, 2 ))
+
+
+```
+
+##Annotating the transcriptsid to gene. 
+Next we mapped transcript to genes. The number of transcripts mapped to a gene is plotted for visualization. One gene may produce alternative splicing products. Hence, some transcripts may map to more than one gene. Another reason is partly due to the way the annotation of exons are done. Then the z scores and Fold changes are also calculated for the genes
+
+```{r}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("EnsDb.Mmusculus.v79", dependencies=TRUE)
+library(EnsDb.Mmusculus.v79)
+edb <- EnsDb.Mmusculus.v79
+
+## Get all transcripts defined in Ensembl (version 75):
+tx <- transcripts(edb, columns=c("tx_id", "gene_id", "gene_name"))
+
+## extract the transcript ids and gene names or even
+mapping <- cbind(tx_id=tx$tx_id, name=tx$gene_name)
+mapping<-as.data.frame(mapping)
+colnames(mapping)[1]<-"trnascript_id"
+write.csv(mapping, file="annotation.csv")
+
+rnaseq_mapped <- merge(rnaseq[,1:78],mapping,by="trnascript_id")
+write.csv(rnaseq_mapped, file="allcombined_transcript_level_expression_mapped_to_gene_name.csv")
+
+rnaseq_mapped_genes<-aggregate(. ~ name, data = rnaseq_mapped,sum,na.rm=T)
+rnaseq_mapped_genes<-rnaseq_mapped_genes[,-2]
+rnaseq_mapped_genes[,1] <- as.character(rnaseq_mapped_genes[,1])
+write.csv(rnaseq_mapped_genes, file="allcombined_gene_level_expression_mapped_to_gene_name.csv")
+
+temp<-as.data.frame(table(rnaseq_mapped[,79]))
+par(font.axis=2,font.lab=2)
+par(mfrow=c(1,2))
+hist(log(temp[,2], base=2), col="gray", las=1, cex.axis=0.8,xlab="transcriptspergene(log2)",main="")
+t<-quantile(temp[,2])
+text(3,20041.06,paste("Median=",t[3],sep=""), cex=1)
+box()
+boxplot(temp[,2], col="gray", las=1, cex.axis=0.8, pch=18,lty=1, ylab="transcriptspergene")
+
+rnaseq_mapped_genes[,79]<-apply(rnaseq_mapped_genes[,75:78],1,mean) 
+rnaseq_mapped_genes[,80]<-apply(rnaseq_mapped_genes[,75:78],1,sd) 
+colnames(rnaseq_mapped_genes)[79:80]<-c("Pop_Mean","Pop_Std_Dev")
+
+rnaseq_mapped_genes[,81]<-(rnaseq_mapped_genes[,75]-rnaseq_mapped_genes[,79])/rnaseq_mapped_genes[,80]
+rnaseq_mapped_genes[,82]<-(rnaseq_mapped_genes[,76]-rnaseq_mapped_genes[,79])/rnaseq_mapped_genes[,80]
+rnaseq_mapped_genes[,83]<-(rnaseq_mapped_genes[,77]-rnaseq_mapped_genes[,79])/rnaseq_mapped_genes[,80]
+rnaseq_mapped_genes[,84]<-(rnaseq_mapped_genes[,78]-rnaseq_mapped_genes[,79])/rnaseq_mapped_genes[,80]
+colnames(rnaseq_mapped_genes)[81:84]<-c("S1_zscore","S2_zscore","S3_zscore","S4_zscore")
+
+# Fold changes
+
+rnaseq_mapped_genes[,85]<-rnaseq_mapped_genes[,76]/rnaseq_mapped_genes[,75]#S2/S1
+rnaseq_mapped_genes[,86]<-rnaseq_mapped_genes[,77]/rnaseq_mapped_genes[,75]#S3/S1
+rnaseq_mapped_genes[,87]<-rnaseq_mapped_genes[,78]/rnaseq_mapped_genes[,75]#S4/S1
+rnaseq_mapped_genes[,88]<-rnaseq_mapped_genes[,77]/rnaseq_mapped_genes[,76]#S3/S2
+rnaseq_mapped_genes[,89]<-rnaseq_mapped_genes[,78]/rnaseq_mapped_genes[,76]#S4/S2
+rnaseq_mapped_genes[,90]<-rnaseq_mapped_genes[,78]/rnaseq_mapped_genes[,77]#S4/S3
+
+```
+
+#Characterizing the expression of candidate genes
+Read in the candidate gene lists: Mesenchymal (Me), Embryonic Stem cell(ES) and induced Pluripotent Stem Cells(iPSC). Plot the heat map, summed z score and summed TPKM plots for each category. Visualize how these genes change further using egg-plots (z scores), projected 3D histogram and a scatter-cor-plot. 
+
+Next, calculate the number of candidate transcripts and genes in the top 10% highly expressed genes or transcripts. Plot this number as a heat map. Then extract the genes in these conditions and plot the heat map of them for visualization.
+
+Lastly, plot the bar plot of some important genes. Error bars are 95CI.
+
+Note, the candidate gene and the important gene lists were obtained from Bibhas Roy. 
+
+```{r}
+#read int the genelists
+candidate_genes <- read.csv("D:/saradha/RNA seq/candidate_genes.csv")
+candidate_genes[,1] <- as.character(candidate_genes[,1])
+Me<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% candidate_genes[,1])
+candidate_genes[,2] <- as.character(candidate_genes[,2])
+ES<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% candidate_genes[,2])
+candidate_genes[,3] <- as.character(candidate_genes[,3])
+iPSC<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% candidate_genes[,3])
+
+library("gplots")
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(Me[,75:78]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.9,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = Me[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+me_zscore<-as.data.frame(x$carpet)
+t<-rowSums(me_zscore)
+t_up<-max(t)+5
+t_dw<-min(t)-5
+barplot(t,las=1,ylab="Summed zscore",names =c("S1","S2","S3","S4"),ylim=c(t_dw,t_up), main="Mesenchymal")
+box()
+abline(h=0)
+par(font.axis=2,font.lab=2)
+x<-colSums(Me[,75:78])
+x_up<-max(x)+200
+barplot(x,las=1,ylab="Summed Tpkm",names =c("S1","S2","S3","S4"),ylim=c(0,x_up), main="Mesenchymal")
+box()
+
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(ES[,75:78]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.9,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = ES[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+es_zscore<-as.data.frame(x$carpet)
+t<-rowSums(es_zscore)
+t_up<-max(t)+5
+t_dw<-min(t)-5
+barplot(t,las=1,ylab="Summed zscore",names =c("S1","S2","S3","S4"),ylim=c(t_dw,t_up),main="ES")
+box()
+abline(h=0)
+par(font.axis=2,font.lab=2)
+x<-colSums(ES[,75:78])
+x_up<-max(x)+200
+barplot(x,las=1,ylab="Summed Tpkm",names =c("S1","S2","S3","S4"),ylim=c(0,x_up), main="ES")
+box()
+
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(iPSC[,75:78]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.9,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = iPSC[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+iPSC_zscore<-as.data.frame(x$carpet)
+t<-rowSums(iPSC_zscore, na.rm = T)
+t_up<-max(t)+5
+t_dw<-min(t)-5
+barplot(t,las=1,ylab="Summed zscore",names =c("S1","S2","S3","S4"),ylim=c(t_dw,t_up), main="iPSC")
+box()
+abline(h=0)
+x<-colSums(iPSC[,75:78])
+x_up<-max(x)+200
+barplot(x,las=1,ylab="Summed Tpkm",names =c("S1","S2","S3","S4"),ylim=c(0,x_up), main="iPSC")
+box()
+
+# fold change
+par(font.axis=2,font.lab=2)
+Me[,87]<-Me[,78]/Me[,75]
+ES[,87]<-ES[,78]/ES[,75]
+iPSC[,87]<-iPSC[,78]/iPSC[,75]
+boxplot(log(Me[,87],base=2),log(ES[,87],base=2),log(iPSC[,87],base=2),na.rm=T, las=1, col="gray",pch=18, names=c("Mesenchymal","ES","iPSC"),
+        ylab="log(2) Fold Change ( 10 Days/ 3hour)",lty=1)
+abline(h=0, lwd=1,col="red")
+
+#Eggplots
+plot(rnaseq_mapped_genes[,81]~rnaseq_mapped_genes[,84], col="gray",cex=0.6, xlab="S4",ylab="S1", pch=18, 
+     las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,81]~Me[,84], col="red", pch=18)
+points(ES[,81]~ES[,84], col="green4", pch=18)
+points(iPSC[,81]~iPSC[,84], col="blue", pch=18)
+legend(0.610647,2.1,c("Mesenchymal","ES","iPSC"), lty=c(1,1), lwd=c(2.5,2.5),col=c("red","green4","blue"), cex=0.6) 
+
+par(mfrow=c(2,3))
+plot(rnaseq_mapped_genes[,81]~rnaseq_mapped_genes[,82], col="gray",cex=0.5, xlab="S2",ylab="S1", pch=18,las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,81]~Me[,82], col="red", pch=18)
+points(ES[,81]~ES[,82], col="green4", pch=18)
+points(iPSC[,81]~iPSC[,82], col="blue", pch=18)
+plot(rnaseq_mapped_genes[,81]~rnaseq_mapped_genes[,83], col="gray",cex=0.5, xlab="S3",ylab="S1", pch=18,las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,81]~Me[,83], col="red", pch=18)
+points(ES[,81]~ES[,83], col="green4", pch=18)
+points(iPSC[,81]~iPSC[,83], col="blue", pch=18)
+plot(rnaseq_mapped_genes[,81]~rnaseq_mapped_genes[,84], col="gray",cex=0.5, xlab="S4",ylab="S1", pch=18,las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,81]~Me[,84], col="red", pch=18)
+points(ES[,81]~ES[,84], col="green4", pch=18)
+points(iPSC[,81]~iPSC[,84], col="blue", pch=18)
+legend(0.610647,2.1,c("Mesenchymal","ES","iPSC"), lty=c(1,1), lwd=c(2.5,2.5),col=c("red","green4","blue"), cex=0.6) 
+plot(rnaseq_mapped_genes[,82]~rnaseq_mapped_genes[,83], col="gray",cex=0.5, xlab="S3",ylab="S2", pch=18,las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,82]~Me[,83], col="red", pch=18)
+points(ES[,82]~ES[,83], col="green4", pch=18)
+points(iPSC[,82]~iPSC[,83], col="blue", pch=18)
+plot(rnaseq_mapped_genes[,82]~rnaseq_mapped_genes[,84], col="gray",cex=0.5, xlab="S4",ylab="S3", pch=18,las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,82]~Me[,84], col="red", pch=18)
+points(ES[,82]~ES[,84], col="green4", pch=18)
+points(iPSC[,82]~iPSC[,84], col="blue", pch=18)
+plot(rnaseq_mapped_genes[,83]~rnaseq_mapped_genes[,84], col="gray",cex=0.5, xlab="S4",ylab="S3", pch=18,las=1, xlim=c(-2,2), ylim=c(-2,2))
+points(Me[,83]~Me[,84], col="red", pch=18)
+points(ES[,83]~ES[,84], col="green4", pch=18)
+points(iPSC[,83]~iPSC[,84], col="blue", pch=18)
+
+
+#3dhistograms
+library(ggplot2)
+library(gridExtra)
+par(mfrow=c(1,1))
+t<-(Me[,c(81,84)])
+plot1<-qplot(S1_zscore,S4_zscore, data=t, geom='bin2d', xlim=c(-2,2),ylim=c(-2,2), main="Mesenchymal")
+t<-(ES[,c(81,84)])
+plot2<-qplot(S1_zscore,S4_zscore, data=t, geom='bin2d', xlim=c(-2,2),ylim=c(-2,2), main="ES")
+t<-(iPSC[,c(81,84)])
+plot3<-qplot(S1_zscore,S4_zscore, data=t, geom='bin2d', xlim=c(-2,2),ylim=c(-2,2), main="iPSC")
+t<-(rnaseq_mapped_genes[,c(81,84)])
+plot4<-qplot(S1_zscore,S4_zscore, data=t, geom='bin2d', xlim=c(-2,2),ylim=c(-2,2), main="all genes")
+grid.arrange(plot1, plot2, plot3, plot4,ncol=2,nrow=2)
+
+scatterhist = function(x, y, xlab="", ylab=""){
+  zones=matrix(c(2,0,1,3), ncol=2, byrow=TRUE)
+  layout(zones, widths=c(4/5,1/5), heights=c(1/5,4/5))
+  xhist = hist(x, plot=FALSE)
+  yhist = hist(y, plot=FALSE)
+  top = max(c(xhist$counts, yhist$counts))
+  par(mar=c(4,4,1,1))
+  plot(x,y,pch=18,xlab="",ylab="")
+  par(mar=c(0,3,1,1))
+  barplot(xhist$counts, axes=FALSE, ylim=c(0, top), space=0,xlab="",ylab="")
+  par(mar=c(3,0,1,1))
+  barplot(yhist$counts, axes=FALSE, xlim=c(0, top), space=0, horiz=TRUE,xlab="",ylab="")
+  par(oma=c(3,3,0,0))
+  mtext(xlab, side=1, line=1, outer=TRUE, adj=0, 
+        at=.8 * (mean(x) - min(x))/(max(x)-min(x)))
+  mtext(ylab, side=2, line=1, outer=TRUE, adj=0, 
+        at=(.8 * (mean(y) - min(y))/(max(y) - min(y))))
+}
+par(mfrow=c(1,1))
+ds =(Me[,c(81,84)])
+with(ds, scatterhist(S1_zscore,S4_zscore, xlab="S4_Me", ylab="S1_Me"))
+ds =(ES[,c(81,84)])
+with(ds, scatterhist(S1_zscore,S4_zscore, xlab="S4_ES", ylab="S1_ES"))
+ds =(iPSC[,c(81,84)])
+with(ds, scatterhist(S1_zscore,S4_zscore, xlab="S4_iPSC", ylab="S1_iPSC"))
+ds =(rnaseq_mapped_genes[,c(81,84)])
+with(ds, scatterhist(S1_zscore,S4_zscore, xlab="S4_zscore", ylab="S1_zscore"))
+
+#plotting for corrplot for candidate gene sets
+Me[,91]<-"Mesenchymal"
+ES[,91]<-"ES"
+iPSC[,91]<-"iPSC"
+candidate_genes_expression<-rbind(Me, ES)
+candidate_genes_expression<-rbind(candidate_genes_expression, iPSC)
+candidate_genes_expression[,91]<-factor(candidate_genes_expression[,91])
+par(font.axis=2,font.lab=2)
+plot(log10(candidate_genes_expression[,75:78]), lower.panel = panel.cor,upper.panel = upper.panel.col)
+par(font.axis=2,font.lab=2)
+plot(log10(Me[,75:78]), lower.panel = panel.cor,upper.panel = upper.panel)
+par(font.axis=2,font.lab=2)
+plot(log10(ES[,75:78]), lower.panel = panel.cor,upper.panel = upper.panel)
+par(font.axis=2,font.lab=2)
+plot(log10(iPSC[,75:78]), lower.panel = panel.cor,upper.panel = upper.panel)
+
+# top exons
+n<-round(nrow(rnaseq_mapped)*0.1,0)
+S1_topexons<-rnaseq_mapped[order(rnaseq_mapped[,75]),]
+S1_topexons<-tail(S1_topexons,n)
+S2_topexons<-rnaseq_mapped[order(rnaseq_mapped[,76]),]
+S2_topexons<-tail(S2_topexons,n)
+S3_topexons<-rnaseq_mapped[order(rnaseq_mapped[,77]),]
+S3_topexons<-tail(S3_topexons,n)
+S4_topexons<-rnaseq_mapped[order(rnaseq_mapped[,78]),]
+S4_topexons<-tail(S4_topexons,n)
+m<-nrow(subset(S1_topexons,S1_topexons[,79] %in% candidate_genes[,1]))
+e<-nrow(subset(S1_topexons,S1_topexons[,79] %in% candidate_genes[,2]))
+i<-nrow(subset(S1_topexons,S1_topexons[,79] %in% candidate_genes[,3]))
+S1_fractions<-c(m,e,i)
+m<-nrow(subset(S2_topexons,S2_topexons[,79] %in% candidate_genes[,1]))
+e<-nrow(subset(S2_topexons,S2_topexons[,79] %in% candidate_genes[,2]))
+i<-nrow(subset(S2_topexons,S2_topexons[,79] %in% candidate_genes[,3]))
+S2_fractions<-c(m,e,i)
+m<-nrow(subset(S3_topexons,S3_topexons[,79] %in% candidate_genes[,1]))
+e<-nrow(subset(S3_topexons,S3_topexons[,79] %in% candidate_genes[,2]))
+i<-nrow(subset(S3_topexons,S3_topexons[,79] %in% candidate_genes[,3]))
+S3_fractions<-c(m,e,i)
+m<-nrow(subset(S4_topexons,S4_topexons[,79] %in% candidate_genes[,1]))
+e<-nrow(subset(S4_topexons,S4_topexons[,79] %in% candidate_genes[,2]))
+i<-nrow(subset(S4_topexons,S4_topexons[,79] %in% candidate_genes[,3]))
+S4_fractions<-c(m,e,i)
+top_10_percentexons<-as.data.frame(S1_fractions)
+top_10_percentexons[,2]<-S2_fractions
+top_10_percentexons[,3]<-S3_fractions
+top_10_percentexons[,4]<-S4_fractions
+row.names(top_10_percentexons)<-c("Mesenchymal","ES","iPSC")
+colnames(top_10_percentexons)<-c("S1","S2","S3","S4")
+library("corrplot")
+corrplot(as.matrix(top_10_percentexons),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3)
+temp<-top_10_percentexons
+colnames(temp)<-c("3 Hour","3 Days","6 Days","10 Days")
+par(font.axis=2,font.lab=2)
+corrplot(as.matrix(temp),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,method="color",addgrid.col="black")
+
+# top genes
+n<-round(nrow(rnaseq_mapped_genes)*0.1,0)
+S1_topgenes<-rnaseq_mapped_genes[order(rnaseq_mapped_genes[,75]),]
+S1_topgenes<-tail(S1_topgenes,n)
+S2_topgenes<-rnaseq_mapped_genes[order(rnaseq_mapped_genes[,76]),]
+S2_topgenes<-tail(S2_topgenes,n)
+S3_topgenes<-rnaseq_mapped_genes[order(rnaseq_mapped_genes[,77]),]
+S3_topgenes<-tail(S3_topgenes,n)
+S4_topgenes<-rnaseq_mapped_genes[order(rnaseq_mapped_genes[,78]),]
+S4_topgenes<-tail(S4_topgenes,n)
+m<-nrow(subset(S1_topgenes,S1_topgenes[,1] %in% candidate_genes[,1]))
+e<-nrow(subset(S1_topgenes,S1_topgenes[,1] %in% candidate_genes[,2]))
+i<-nrow(subset(S1_topgenes,S1_topgenes[,1] %in% candidate_genes[,3]))
+S1_fractions<-c(m,e,i)
+m<-nrow(subset(S2_topgenes,S2_topgenes[,1] %in% candidate_genes[,1]))
+e<-nrow(subset(S2_topgenes,S2_topgenes[,1] %in% candidate_genes[,2]))
+i<-nrow(subset(S2_topgenes,S2_topgenes[,1] %in% candidate_genes[,3]))
+S2_fractions<-c(m,e,i)
+m<-nrow(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,1]))
+e<-nrow(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,2]))
+i<-nrow(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,3]))
+S3_fractions<-c(m,e,i)
+m<-nrow(subset(S4_topgenes,S4_topgenes[,1] %in% candidate_genes[,1]))
+e<-nrow(subset(S4_topgenes,S4_topgenes[,1] %in% candidate_genes[,2]))
+i<-nrow(subset(S4_topgenes,S4_topgenes[,1] %in% candidate_genes[,3]))
+S4_fractions<-c(m,e,i)
+top_10_percent<-as.data.frame(S1_fractions)
+top_10_percent[,2]<-S2_fractions
+top_10_percent[,3]<-S3_fractions
+top_10_percent[,4]<-S4_fractions
+row.names(top_10_percent)<-c("Mesenchymal","ES","iPSC")
+colnames(top_10_percent)<-c("S1","S2","S3","S4")
+library("corrplot")
+corrplot(as.matrix(top_10_percent),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3)
+temp<-top_10_percent
+colnames(temp)<-c("3 Hour","3 Days","6 Days","10 Days")
+par(font.axis=2,font.lab=2)
+corrplot(as.matrix(temp),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,method="color",addgrid.col="black")
+m1<-(subset(S1_topgenes,S1_topgenes[,1] %in% candidate_genes[,1]))
+m2<-(subset(S2_topgenes,S2_topgenes[,1] %in% candidate_genes[,1]))
+m3<-(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,1]))
+m4<-(subset(S4_topgenes,S4_topgenes[,1] %in% candidate_genes[,1]))
+selected_topgenes<-as.data.frame(rbind(m1,NA,m2,NA,m3,NA,m4))
+selected_topgenes[,90]<-"Mesenchymal"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(selected_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.6,key.xlab="",cex.axis=0.7,
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = selected_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+e1<-(subset(S1_topgenes,S1_topgenes[,1] %in% candidate_genes[,2]))
+e2<-(subset(S2_topgenes,S2_topgenes[,1] %in% candidate_genes[,2]))
+e3<-(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,2]))
+e4<-(subset(S4_topgenes,S4_topgenes[,1] %in% candidate_genes[,2]))
+temp<-as.data.frame(rbind(e1,NA,e2,NA,e3,NA,e4))
+temp[,90]<-"ES"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(temp[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.5,key.xlab="",cex.axis=0.7,
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = temp[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+selected_topgenes<-rbind(selected_topgenes,NA,NA,temp,NA,NA)
+i1<-(subset(S1_topgenes,S1_topgenes[,1] %in% candidate_genes[,3]))
+i2<-(subset(S2_topgenes,S2_topgenes[,1] %in% candidate_genes[,3]))
+i3<-(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,3]))
+i4<-(subset(S3_topgenes,S3_topgenes[,1] %in% candidate_genes[,3]))
+temp<-as.data.frame(rbind(i1,NA,i2,NA,i3,NA,i4))
+temp[,90]<-"iPSC"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(temp[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.5,key.xlab="",cex.axis=0.7,
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = temp[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+selected_topgenes<-rbind(selected_topgenes,NA,NA,temp)
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(selected_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.2,key.xlab="",
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = selected_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+S1_topgenes<-as.data.frame(rbind(m1,NA,e1,NA,i1))
+S1_topgenes[,90]<-"S1"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(S1_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=1,key.xlab="",
+             trace='none',dendrogram="none",cexCol=1,srtCol =90,key.title=" ",
+             ylab = "",labRow = S1_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+S2_topgenes<-as.data.frame(rbind(m2,NA,e2,NA,i2))
+S2_topgenes[,90]<-"S2"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(S2_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=1,key.xlab="",
+             trace='none',dendrogram="none",cexCol=1,srtCol =90,key.title=" ",
+             ylab = "",labRow = S2_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+S3_topgenes<-as.data.frame(rbind(m3,NA,e3,NA,i3))
+S3_topgenes[,90]<-"S3"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(S3_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=1,key.xlab="",
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = S3_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+S4_topgenes<-as.data.frame(rbind(m4,NA,e4,NA,i4))
+S4_topgenes[,90]<-"S4"
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(S4_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=1,key.xlab="",
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = S4_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+selected_topgenes<-as.data.frame(rbind(S1_topgenes,NA,NA,S2_topgenes,NA,NA,S3_topgenes,NA,NA,S4_topgenes))
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(selected_topgenes[,75:78]), col=redgreen(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.2,
+             trace='none',dendrogram="none",cexCol=0.7,srtCol =90,key.title=" ",
+             ylab = "",labRow = selected_topgenes[,1],labCol=c("S1","S2","S3","S4"),density.info="none")
+
+
+# barplot of important genes
+imp<-c("Cdh2","Col1a1","Fn1","Snai1","Vim","Twist1","Col1a2","Alpl","Nanog","Pou5f1","Lin28a","Sox2","Fut4","Klf4","Lmna","Pcna")
+imp_genes<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% imp)
+error.bar <- function(x, y, upper, lower=upper, length=0.02,...){
+  if(length(x) != length(y) | length(y) !=length(lower) | length(lower) != length(upper))
+    stop("vectors must be same length")
+  arrows(x,y+upper, x, y-lower, angle=90, code=3, length=length, ...)
+}
+for( i in 1:nrow(imp_genes)){
+  par(font.axis=2,font.lab=2)
+  y.means<-as.vector(imp_genes[i,c(75:78)])
+  a<-apply(imp_genes[i,c(63,67,71)],1,sd) 
+  b<-apply(imp_genes[i,c(64,68,72)],1,sd) 
+  c<-apply(imp_genes[i,c(65,69,73)],1,sd) 
+  d<-apply(imp_genes[i,c(66,70,74)],1,sd) 
+  y.sd<-(as.vector(c(a,b,c,d)))
+  ylimitup<-max(y.means)+1.5*max(y.sd)
+  barx <- barplot(as.matrix(y.means), names=c("3 Hour","3 Days","6 Days","10 Days"),main=imp_genes[i,1],ylim=c(0,ylimitup),las=1,ylab="TPkM",cex.axis = 1,
+                  xpd = FALSE,cex.names=1)
+  error.bar(barx,as.matrix(y.means), (1.96*y.sd/sqrt(3)))
+  box()
+}
+```
+
+#Calculating the similarities between the RNAseqdata and H3K9ac promoter occupancy
+Epitect qPCR was used to look at H3K9ac occupancy levels in candidate MET/reprogramming genes. This data is obtained from Bibhas. First, heat maps showing H3k9ac promoter occupancy levels and RNAseq data are plotted. Then Scatter-corr plots between Epitect and RNASeq were plotted to probe the relationship between the two. (z score and raw data)
+
+Obtain Epithelial, Mesenchymal, Proliferative and Reprogramming gene lists. Aggregate the sum and mean values and plot bar plot for both RNAseq and H3K9ac levels. 
+
+```{r}
+#epitect data
+epitect<-read.csv("D:/saradha/RNA seq/epitect.csv")
+epitect[,1] <- as.character(epitect[,1])
+rna_epi<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% epitect[,1])
+colnames(epitect)[1]<-"name"
+rownames(epitect)<-make.names(epitect[,1], unique=TRUE)
+rownames(rna_epi)<-rna_epi[,1]
+
+library("gplots")
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(rna_epi[,75:78]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.9,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = rna_epi[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+par(font.axis=2,font.lab=2)
+y<-heatmap.2(as.matrix(epitect[,2:5]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.9,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = epitect[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+rna_zscore<-as.data.frame(t(x$carpet))
+rna_zscore[,5]<-as.character(rownames(rna_zscore))
+epi_zscore<-as.data.frame(t(y$carpet))
+epi_zscore[,5]<-as.character(rownames(epi_zscore))
+t<-merge(rna_zscore,epi_zscore, by="V5")
+par(mfrow=c(2,2))
+plot(t[,2]~t[,6], pch=18, main="S1",xlab="epitect",ylab="rnaseq", las=1)
+plot(t[,3]~t[,7], pch=18, main="S2",xlab="epitect",ylab="rnaseq", las=1)
+plot(t[,4]~t[,8], pch=18, main="S3",xlab="epitect",ylab="rnaseq", las=1)
+plot(t[,5]~t[,9], pch=18, main="S4",xlab="epitect",ylab="rnaseq", las=1)
+t[is.na(t)]<-0
+c<-cor(t[2:9])
+par(mfrow=c(1,1))
+corrplot(c, method="color",tl.col="black" )
+
+t<-merge(rna_epi[,c(1,75:78)], epitect, by="name")
+par(mfrow=c(2,2))
+plot(t[,2]~t[,6], pch=18, main="S1",xlab="epitect",ylab="rnaseq", las=1)
+plot(t[,3]~t[,7], pch=18, main="S2",xlab="epitect",ylab="rnaseq", las=1)
+plot(t[,4]~t[,8], pch=18, main="S3",xlab="epitect",ylab="rnaseq", las=1)
+plot(t[,5]~t[,9], pch=18, main="S4",xlab="epitect",ylab="rnaseq", las=1)
+
+par(mfrow=c(1,1))
+c<-cor(t[2:9])
+corrplot(c, method="color", tl.col="black")
+
+te<-subset(epitect,epitect[,6]=="Epithelial")[,1]
+te_rna<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% te)[,c(1,75:78)]
+te_rna[,6]<-"Epithelial"
+tm<-subset(epitect,epitect[,6]=="Mesenchymal")[,1]
+tm_rna<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% tm)[,c(1,75:78)]
+tm_rna[,6]<-"Mesenchymal"
+tp<-subset(epitect,epitect[,6]=="Proliferation")[,1]
+tp_rna<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% tp)[,c(1,75:78)]
+tp_rna[,6]<-"Proliferation"
+tr<-subset(epitect,epitect[,6]=="Reprogramming")[,1]
+tr_rna<-subset(rnaseq_mapped_genes,rnaseq_mapped_genes[,1] %in% tr)[,c(1,75:78)]
+tr_rna[,6]<-"Reprogramming"
+rna_epitect_groups<-rbind(te_rna,tm_rna,tp_rna,tr_rna)
+
+temp_rna<-aggregate(. ~ V6, data = rna_epitect_groups[,-1],sum)
+temp_epitect<-aggregate(. ~ X.1, data = epitect[,-1],sum)
+par(mfrow=c(1,2),font.axis=2,font.lab=2)
+k<-as.matrix(temp_rna[1,-1])
+barplot(k, las=1, horiz = T, main="Epithelial_RNAseq")
+box()
+k<-as.matrix(temp_epitect[1,-1])
+barplot(k, las=1,horiz = T,main="Epithelial_Epitect")
+box()
+k<-as.matrix(temp_rna[2,-1])
+barplot(k, las=1, horiz = T, main="Mesenchymal_RNAseq")
+box()
+k<-as.matrix(temp_epitect[2,-1])
+barplot(k, las=1,horiz = T,main="Mesenchymal_Epitect")
+box()
+k<-as.matrix(temp_rna[3,-1])
+barplot(k, las=1, horiz = T, main="Proliferation_RNAseq")
+box()
+k<-as.matrix(temp_epitect[3,-1])
+barplot(k, las=1,horiz = T,main="Proliferation_Epitect")
+box()
+k<-as.matrix(temp_rna[4,-1])
+barplot(k, las=1, horiz = T, main="Reprogramming_RNAseq")
+box()
+k<-as.matrix(temp_epitect[4,-1])
+barplot(k, las=1,horiz = T,main="Reprogramming_Epitect")
+box()
+
+temp_rna<-aggregate(. ~ V6, data = rna_epitect_groups[,-1],mean)
+temp_epitect<-aggregate(. ~ X.1, data = epitect[,-1],mean)
+par(mfrow=c(1,2),font.axis=2,font.lab=2)
+k<-as.matrix(temp_rna[1,-1])
+barplot(k, las=1, horiz = T, main="Epithelial_RNAseq")
+box()
+k<-as.matrix(temp_epitect[1,-1])
+barplot(k, las=1,horiz = T,main="Epithelial_Epitect")
+box()
+k<-as.matrix(temp_rna[2,-1])
+barplot(k, las=1, horiz = T, main="Mesenchymal_RNAseq")
+box()
+k<-as.matrix(temp_epitect[2,-1])
+barplot(k, las=1,horiz = T,main="Mesenchymal_Epitect")
+box()
+k<-as.matrix(temp_rna[3,-1])
+barplot(k, las=1, horiz = T, main="Proliferation_RNAseq")
+box()
+k<-as.matrix(temp_epitect[3,-1])
+barplot(k, las=1,horiz = T,main="Proliferation_Epitect")
+box()
+k<-as.matrix(temp_rna[4,-1])
+barplot(k, las=1, horiz = T, main="Reprogramming_RNAseq")
+box()
+k<-as.matrix(temp_epitect[4,-1])
+barplot(k, las=1,horiz = T,main="Reprogramming_Epitect")
+box()
+
+```
+
+
+#Session Information
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,319 @@
+---
+title: "R analysis of RNASeq Count Data Workflow: 3"
+author: "Saradha Venkatachapathy"
+output: 
+  html_document: 
+    fig_caption: yes
+    fig_height: 6
+    highlight: tango
+    toc: yes
+---
+
+# Chromsome Activity
+
+Chromsomal transcriptional activity is defied as the mean expression level of all the genes in a chromosome. Interchromosomal Activity Distance is measured as follows:
+
+IAD(i,j)=(Activity of chromosome(i)+Activity of chromosome(j))/(Activity of chromosome(i)+Activity of chromosome(j))
+
+This change in IAD has been shown to be negatively correlated with Intermingling between chromosomes 
+
+##Load and merge annotation files
+```{r}
+# load annoation libraries
+library(EnsDb.Mmusculus.v79)
+edb <- EnsDb.Mmusculus.v79
+tx <- transcripts(edb, columns=c("tx_id", "gene_id", "gene_name"))
+tx <- transcripts(edb, columns=c("tx_id", "gene_id", "gene_name"
+                                 ,"gene_seq_start","gene_seq_end",
+                                 "entrezid","seq_name"))
+head(tx)
+## extract the transcript ids and gene names and ll other informaiton
+mapping <- cbind(tx_id=tx$tx_id, name=tx$gene_name, entrez=tx$entrezid,
+                 genestart=tx$gene_seq_start,geneend=tx$gene_seq_end,
+                 chrname=tx$seq_name,ensgene=tx$gene_id)
+mapping<-as.data.frame(mapping)
+head(mapping)
+#install annotables to get chromosome number
+#devtools::install_github("stephenturner/annotables")
+library(dplyr)
+library(annotables)
+temp<-grcm38
+temp_anno<-merge(mapping,temp,by="ensgene")
+colnames(temp_anno)[2]<-"trnascript_id"
+rnaseq<-read.csv("allcombined_transcript_level_expression.csv")
+rnaseq<-rnaseq[,-1]
+```
+
+##Estimation with TPKM
+
+```{r}
+#merge all anotaiton files and aggregate by transcript
+rnaseq_mapped_anno <- merge(rnaseq[,1:78],temp_anno,by="trnascript_id")
+rnaseq_mapped_anno[,86]<-as.factor(rnaseq_mapped_anno[,86])
+
+
+rnaseq_mapped_genes_chr<-aggregate(. ~ chr,data=rnaseq_mapped_anno[,c(75:78,86)],mean,na.rm=T)
+library(gplots)
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(rnaseq_mapped_genes_chr[,2:5]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.7,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = rnaseq_mapped_genes_chr[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+
+ch_zscore<-as.data.frame(x$carpet)
+t<-rowSums(ch_zscore,na.rm=T)
+t_up<-max(t)+5
+t_dw<-min(t)-5
+barplot(t,las=1,ylab="Summed zscore",names =c("S1","S2","S3","S4"),ylim=c(t_dw,t_up))
+box()
+abline(h=0)
+
+par(font.axis=2,font.lab=2)
+x<-colSums(rnaseq_mapped_genes_chr[,2:5])
+x_up<-max(x)+200
+barplot(x,las=1,ylab="Summed Tpkm",names =c("S1","S2","S3","S4"),ylim=c(0,x_up),cex.axis=0.6)
+box()
+dev.off()
+Chr<-c(1:19,"X","Y")
+rnaseq_mapped_genes_chr_sub<-subset(rnaseq_mapped_genes_chr,rnaseq_mapped_genes_chr[,1]%in%Chr)
+
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(rnaseq_mapped_genes_chr_sub[,2:5]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.7,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = rnaseq_mapped_genes_chr_sub[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,2]-rnaseq_mapped_genes_chr_sub[i,2])/
+                  ((rnaseq_mapped_genes_chr_sub[,2]+rnaseq_mapped_genes_chr_sub[i,2]))
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S1")
+distmatrix->distmatrix_S1
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,3]-rnaseq_mapped_genes_chr_sub[i,3])/
+    (rnaseq_mapped_genes_chr_sub[,3]+rnaseq_mapped_genes_chr_sub[i,3])
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S2")
+distmatrix->distmatrix_S2
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,4]-rnaseq_mapped_genes_chr_sub[i,4])/
+    (rnaseq_mapped_genes_chr_sub[,4]+rnaseq_mapped_genes_chr_sub[i,4])
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S3")
+distmatrix->distmatrix_S3
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,5]-rnaseq_mapped_genes_chr_sub[i,5])/
+    (rnaseq_mapped_genes_chr_sub[,5]+rnaseq_mapped_genes_chr_sub[i,5])
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S4")
+distmatrix->distmatrix_S4
+
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S1[3,7]
+b<-distmatrix_S2[3,7]
+c<-distmatrix_S3[3,7]
+d<-distmatrix_S4[3,7]
+ch11_15<-c(a,b,c,d)
+x_up<-max(ch11_15+0.1)
+barplot(ch11_15,las=1,ylab="Activity Distance_11_15",names =c("S1","S2","S3","S4"),ylim=c(0,x_up),cex.axis=0.8)
+box()
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S1[15,19]
+b<-distmatrix_S2[15,19]
+c<-distmatrix_S3[15,19]
+d<-distmatrix_S4[15,19]
+ch5_9<-c(a,b,c,d)
+x_up<-max(ch5_9+0.1)
+barplot(ch5_9,las=1,ylab="Activity Distance_5_9",names =c("S1","S2","S3","S4"),ylim=c(0,x_up),cex.axis=0.8)
+box()
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S1[13,16]
+b<-distmatrix_S2[13,16]
+c<-distmatrix_S3[13,16]
+d<-distmatrix_S4[13,16]
+ch3_6<-c(a,b,c,d)
+x_up<-max(ch3_6+0.2)
+barplot(ch3_6,las=1,ylab="Activity Distance_3_6",names =c("S1","S2","S3","S4"),ylim=c(0,1),cex.axis=0.8)
+box()
+
+distmatrix_S4S1<-distmatrix_S4-distmatrix_S1
+library(corrplot)
+corrplot(as.matrix(distmatrix_S4S1),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black", main="S4-S1")
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S4S1[15,19]
+b<-distmatrix_S4S1[13,16]
+c<-distmatrix_S4S1[3,7]
+ch<-c(a,b,c)
+x_up<-max(ch+0.1)
+x_min<-min(ch-0.1)
+barplot(ch,las=1,ylab="Activity Distance",names =c("5-9","3-9","11-15"),ylim=c(x_min,x_up),cex.axis=0.8)
+box()
+```
+
+##Estimation with DESEQ normalised gene counts
+```{r}
+norm_counts<-read.csv(file="DESEQ_norm.csv")
+library(dplyr)
+library(annotables)
+temp<-grcm38
+temp_anno<-merge(mapping,temp,by="ensgene")
+colnames(temp_anno)[2]<-"trnascript_id"
+temp_anno[,3]<-as.character(temp_anno[,3])
+#merge all anotaiton files and aggregate by gene name
+rnaseq_mapped_anno<-norm_counts
+colnames(rnaseq_mapped_anno)[14]<-"name"
+rnaseq_mapped_anno <- merge(rnaseq_mapped_anno[,14:18],temp_anno,by="name")
+rnaseq_mapped_anno[,13]<-as.factor(rnaseq_mapped_anno[,13])
+
+
+rnaseq_mapped_genes_chr<-aggregate(. ~ chr,data=rnaseq_mapped_anno[,c(2:5,13)],mean,na.rm=T)
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(rnaseq_mapped_genes_chr[,2:5]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.7,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = rnaseq_mapped_genes_chr[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+ch_zscore<-as.data.frame(x$carpet)
+t<-rowSums(ch_zscore,na.rm=T)
+t_up<-max(t)+5
+t_dw<-min(t)-5
+barplot(t,las=1,ylab="Summed zscore",names =c("S1","S2","S3","S4"),ylim=c(t_dw,t_up))
+box()
+abline(h=0)
+par(font.axis=2,font.lab=2)
+x<-colSums(rnaseq_mapped_genes_chr[,2:5])
+x_up<-max(x)+200
+barplot(x,las=1,ylab="Summed Tpkm",names =c("S1","S2","S3","S4"),ylim=c(0,x_up),cex.axis=0.6)
+box()
+Chr<-c(1:19,"X","Y")
+rnaseq_mapped_genes_chr_sub<-subset(rnaseq_mapped_genes_chr,rnaseq_mapped_genes_chr[,1]%in%Chr)
+par(font.axis=2,font.lab=2)
+x<-heatmap.2(as.matrix(rnaseq_mapped_genes_chr_sub[,2:5]), col=greenred(75),
+             scale="row",key=T, symkey=T, Rowv=F,Colv=FALSE,cexRow=0.7,
+             trace='none',dendrogram="none",cexCol=1.2,srtCol =90,key.title=" ",key.xlab="",cex.axis=0.7,
+             ylab = "",labRow = rnaseq_mapped_genes_chr_sub[,1],labCol=c("3 Hour","3 Days","6 Days","10 Days"),density.info="none")
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,2]-rnaseq_mapped_genes_chr_sub[i,2])/
+    ((rnaseq_mapped_genes_chr_sub[,2]+rnaseq_mapped_genes_chr_sub[i,2]))
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S1")
+distmatrix->distmatrix_S1
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,3]-rnaseq_mapped_genes_chr_sub[i,3])/
+    (rnaseq_mapped_genes_chr_sub[,3]+rnaseq_mapped_genes_chr_sub[i,3])
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S2")
+distmatrix->distmatrix_S2
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,4]-rnaseq_mapped_genes_chr_sub[i,4])/
+    (rnaseq_mapped_genes_chr_sub[,4]+rnaseq_mapped_genes_chr_sub[i,4])
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black",main="S3")
+distmatrix->distmatrix_S3
+
+distmatrix<-as.data.frame(matrix(nrow=21,ncol=21))
+rownames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+colnames(distmatrix)<-rnaseq_mapped_genes_chr_sub[,1]
+for(i in c(1:21)){
+  distmatrix[,i]<-abs(rnaseq_mapped_genes_chr_sub[,5]-rnaseq_mapped_genes_chr_sub[i,5])/
+    (rnaseq_mapped_genes_chr_sub[,5]+rnaseq_mapped_genes_chr_sub[i,5])
+}
+library(corrplot)
+corrplot(as.matrix(distmatrix),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black", main="S4")
+distmatrix->distmatrix_S4
+
+
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S1[3,7]
+b<-distmatrix_S2[3,7]
+c<-distmatrix_S3[3,7]
+d<-distmatrix_S4[3,7]
+ch11_15<-c(a,b,c,d)
+x_up<-max(ch11_15+0.2)
+barplot(ch11_15,las=1,ylab="Activity Distance_11_15",names =c("S1","S2","S3","S4"),ylim=c(0,1),cex.axis=0.8)
+box()
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S1[19,15]
+b<-distmatrix_S2[19,15]
+c<-distmatrix_S3[19,15]
+d<-distmatrix_S4[19,15]
+ch5_9<-c(a,b,c,d)
+x_up<-max(ch5_9+0.2)
+barplot(ch5_9,las=1,ylab="Activity Distance_5_9",names =c("S1","S2","S3","S4"),ylim=c(0,1),cex.axis=0.8)
+box()
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S1[13,16]
+b<-distmatrix_S2[13,16]
+c<-distmatrix_S3[13,16]
+d<-distmatrix_S4[13,16]
+ch3_6<-c(a,b,c,d)
+x_up<-max(ch3_6+0.2)
+barplot(ch3_6,las=1,ylab="Activity Distance_3_6",names =c("S1","S2","S3","S4"),ylim=c(0,1),cex.axis=0.8)
+box()
+
+distmatrix_S4S1<-distmatrix_S4-distmatrix_S1
+corrplot(as.matrix(distmatrix_S4S1),is.corr=F, tl.col="black",cl.pos="b", cl.ratio=0.3,
+         method="color",addgrid.col = "black", main="S4-S1")
+
+
+par(font.axis=2,font.lab=2)
+a<-distmatrix_S4S1[15,19]
+b<-distmatrix_S4S1[13,16]
+c<-distmatrix_S4S1[3,7]
+ch<-c(a,b,c)
+x_up<-max(ch+0.1)
+x_min<-min(ch-0.1)
+barplot(ch,las=1,ylab="change in Activity Distance",names =c("5-9","3-9","11-15"),ylim=c(x_min,x_up),cex.axis=0.8)
+box()
+
+```
+
